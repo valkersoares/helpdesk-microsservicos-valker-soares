@@ -1,97 +1,22 @@
-# Sobe todos os serviços, os bancos e o gateway.
-# Uso: docker compose up --build
-#
-# Só o gateway publica porta para fora. Cada serviço tem o seu próprio banco
-# (volume nomeado), e nenhum serviço acessa o banco de outro.
-
 services:
-
-  gateway:
-    build: ./gateway
-    container_name: helpdesk-gateway
-    ports:
-      - "8000:8000"
-    environment:
-      USUARIOS_URL: http://usuarios:8001
-      INVENTARIO_URL: http://inventario:8002
-      CHAMADOS_URL: http://chamados:8003
-      NOTIFICACOES_URL: http://notificacoes:8004
-    depends_on:
-      - usuarios
-      - inventario
-      - chamados
-    networks:
-      - helpdesk
-
-  usuarios:
-    build: ./servicos/usuarios
-    container_name: helpdesk-usuarios
-    environment:
-      # Cada serviço confere o token sozinho, com o mesmo segredo.
-      JWT_SEGREDO: ${JWT_SEGREDO}
-      BANCO_URL: sqlite:////dados/usuarios.db
-      DADOS_EXEMPLO: ${DADOS_EXEMPLO:-1}
-      SENHA_EXEMPLO: ${SENHA_EXEMPLO:-Helpdesk2026}
-    volumes:
-      - banco_usuarios:/dados
-    networks:
-      - helpdesk
-
-  inventario:
-    build: ./servicos/inventario
-    container_name: helpdesk-inventario
-    environment:
-      JWT_SEGREDO: ${JWT_SEGREDO}
-      BANCO_URL: sqlite:////dados/inventario.db
-      DADOS_EXEMPLO: ${DADOS_EXEMPLO:-1}
-    volumes:
-      - banco_inventario:/dados
-    networks:
-      - helpdesk
-
-  chamados:
-    build: ./servicos/chamados
-    container_name: helpdesk-chamados
-    environment:
-      JWT_SEGREDO: ${JWT_SEGREDO}
-      BANCO_URL: sqlite:////dados/chamados.db
-      # Nos bastidores da rede do Compose, os serviços se chamam pelo nome.
-      USUARIOS_URL: http://usuarios:8001
-      INVENTARIO_URL: http://inventario:8002
-      # Timeout curto: se o vizinho estiver fora, responde 503 rápido em vez de travar.
-      TIMEOUT_HTTP: "2"
-      FILA_URL: redis://fila:6379/0
-      DADOS_EXEMPLO: ${DADOS_EXEMPLO:-1}
-    volumes:
-      - banco_chamados:/dados
-    networks:
-      - helpdesk
-
-  notificacoes:
-    build: ./servicos/notificacoes
-    container_name: helpdesk-notificacoes
-    environment:
-      JWT_SEGREDO: ${JWT_SEGREDO}
-      BANCO_URL: sqlite:////dados/notificacoes.db
-      FILA_URL: redis://fila:6379/0
-    volumes:
-      - banco_notificacoes:/dados
-    networks:
-      - helpdesk
-
-  # Bônus: fila de eventos (ChamadoAberto, ChamadoAtribuido, ChamadoResolvido).
-  fila:
-    image: redis:7-alpine
-    container_name: helpdesk-fila
-    networks:
-      - helpdesk
-
-networks:
   helpdesk:
-    driver: bridge
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"   # só acessível pelo próprio computador
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DADOS_EXEMPLO: ${DADOS_EXEMPLO:-1}
+    volumes:
+      - dados:/dados
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 volumes:
-  banco_usuarios:
-  banco_inventario:
-  banco_chamados:
-  banco_notificacoes:
+  dados:
